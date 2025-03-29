@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"unsafe"
@@ -12,79 +13,81 @@ type Option func(*GamePerson)
 
 func WithName(name string) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.name = name
 	}
 }
 
 func WithCoordinates(x, y, z int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.x = int32(x)
+		person.y = int32(y)
+		person.z = int32(z)
 	}
 }
 
 func WithGold(gold int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.gold = int32(gold)
 	}
 }
 
 func WithMana(mana int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.mana = uint16(mana)
 	}
 }
 
 func WithHealth(health int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.health = uint16(health)
 	}
 }
 
 func WithRespect(respect int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.respect = uint8(respect)
 	}
 }
 
 func WithStrength(strength int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.strength = uint8(strength)
 	}
 }
 
 func WithExperience(experience int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.experience = uint8(experience)
 	}
 }
 
 func WithLevel(level int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.level = uint8(level)
 	}
 }
 
 func WithHouse() func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.hasHouse = true
 	}
 }
 
 func WithGun() func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.hasGun = true
 	}
 }
 
 func WithFamily() func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.hasFamilty = true
 	}
 }
 
 func WithType(personType int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		// need to implement
+		person.personType = uint8(personType)
 	}
 }
 
@@ -94,92 +97,116 @@ const (
 	WarriorGamePersonType
 )
 
+// GamePerson выравнивание 8 байт, потому что у строка это заголовок вида (ptr, len), то есть 8 + 8 байт
 type GamePerson struct {
-	// need to implement
+	hasHouse, hasGun, hasFamilty                     bool  // выравнивание на 8
+	personType, respect, strength, experience, level uint8 // пойдет вместе булами выше в одно выравнивание, видимо потому что все однобайтовое
+
+	mana, health  uint16 // новые выравнивание на 8, offset 8 и 10 соотвественно
+	x, y, z, gold int32  // займет 2 раза по 8 байт, offsets 12, 16, 20, 24 соответственно
+	name          string // займет 2 раза по 8 байт, offset 32
+
+	// итоговый размер будет 48
 }
 
 func NewGamePerson(options ...Option) GamePerson {
-	// need to implement
-	return GamePerson{}
+	p := GamePerson{}
+
+	for _, opt := range options {
+		opt(&p)
+	}
+
+	return p
 }
 
 func (p *GamePerson) Name() string {
-	// need to implement
-	return ""
+	return p.name
 }
 
 func (p *GamePerson) X() int {
-	// need to implement
-	return 0
+	return int(p.x)
 }
 
 func (p *GamePerson) Y() int {
-	// need to implement
-	return 0
+	return int(p.y)
 }
 
 func (p *GamePerson) Z() int {
-	// need to implement
-	return 0
+	return int(p.z)
 }
 
 func (p *GamePerson) Gold() int {
-	// need to implement
-	return 0
+	return int(p.gold)
 }
 
 func (p *GamePerson) Mana() int {
-	// need to implement
-	return 0
+	return int(p.mana)
 }
 
 func (p *GamePerson) Health() int {
-	// need to implement
-	return 0
+	return int(p.health)
 }
 
 func (p *GamePerson) Respect() int {
-	// need to implement
-	return 0
+	return int(p.respect)
 }
 
 func (p *GamePerson) Strength() int {
-	// need to implement
-	return 0
+	return int(p.strength)
 }
 
 func (p *GamePerson) Experience() int {
-	// need to implement
-	return 0
+	return int(p.experience)
 }
 
 func (p *GamePerson) Level() int {
-	// need to implement
-	return 0
+	return int(p.level)
 }
 
 func (p *GamePerson) HasHouse() bool {
-	// need to implement
-	return false
+	return p.hasHouse
 }
 
 func (p *GamePerson) HasGun() bool {
-	// need to implement
-	return false
+	return p.hasGun
 }
 
 func (p *GamePerson) HasFamilty() bool {
-	// need to implement
-	return false
+	return p.hasFamilty
 }
 
 func (p *GamePerson) Type() int {
-	// need to implement
-	return 0
+	return int(p.personType)
 }
 
 func TestGamePerson(t *testing.T) {
+
 	assert.LessOrEqual(t, unsafe.Sizeof(GamePerson{}), uintptr(64))
+
+	fmt.Println("Sizeof:", unsafe.Sizeof(GamePerson{}))
+	fmt.Println("Alignof:", unsafe.Alignof(GamePerson{}))
+	fmt.Println()
+
+	gp := GamePerson{}
+	fmt.Println("Offsetof(hasHouse):", unsafe.Offsetof(gp.hasHouse))
+	fmt.Println("Offsetof(hasGun):", unsafe.Offsetof(gp.hasGun))
+	fmt.Println("Offsetof(hasFamilty):", unsafe.Offsetof(gp.hasFamilty))
+	fmt.Println()
+	fmt.Println("Offsetof(personType):", unsafe.Offsetof(gp.personType))
+	fmt.Println("Offsetof(respect):", unsafe.Offsetof(gp.respect))
+	fmt.Println("Offsetof(strength):", unsafe.Offsetof(gp.strength))
+	fmt.Println("Offsetof(experience):", unsafe.Offsetof(gp.experience))
+	fmt.Println("Offsetof(level):", unsafe.Offsetof(gp.level))
+	fmt.Println()
+	fmt.Println("Offsetof(mana):", unsafe.Offsetof(gp.mana))
+	fmt.Println("Offsetof(health):", unsafe.Offsetof(gp.health))
+	fmt.Println()
+	fmt.Println("Offsetof(x):", unsafe.Offsetof(gp.x))
+	fmt.Println("Offsetof(y):", unsafe.Offsetof(gp.y))
+	fmt.Println("Offsetof(z):", unsafe.Offsetof(gp.z))
+	fmt.Println("Offsetof(gold):", unsafe.Offsetof(gp.gold))
+	fmt.Println()
+	fmt.Println("Offsetof(name):", unsafe.Offsetof(gp.name))
 
 	const x, y, z = math.MinInt32, math.MaxInt32, 0
 	const name = "aaaaaaaaaaaaa_bbbbbbbbbbbbb_cccccccccccccc"
