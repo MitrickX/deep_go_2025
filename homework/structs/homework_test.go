@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"testing"
 	"unsafe"
@@ -9,11 +8,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func extractFromUint32(source uint32, size int, shift int) uint32 {
+	rigthShift := 4*byteSize - (shift + size)
+	leftShift := rigthShift + shift
+	return (source << rigthShift) >> leftShift
+}
+
+func extractFromByte(source byte, size int, shift int) byte {
+	rigthShift := byteSize - (shift + size)
+	leftShift := rigthShift + shift
+	return (source << rigthShift) >> leftShift
+}
+
 type Option func(*GamePerson)
 
 func WithName(name string) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.name = name
+		n := len(name)
+		if n > maxNameLen {
+			n = maxNameLen
+		}
+		for i := 0; i < n; i++ {
+			person.nameBytes[i] = name[i]
+		}
+		person.personTypeAndNameLen |= byte(n) << nameLenShift
 	}
 }
 
@@ -33,61 +51,86 @@ func WithGold(gold int) func(*GamePerson) {
 
 func WithMana(mana int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.mana = uint16(mana)
+		m := mana << manaShift
+		person.manaAndHelthAndFlags[2] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[1] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[0] |= byte(m)
 	}
 }
 
 func WithHealth(health int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.health = uint16(health)
+		m := health << healthShift
+		person.manaAndHelthAndFlags[2] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[1] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[0] |= byte(m)
 	}
 }
 
 func WithRespect(respect int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.respect = uint8(respect)
+		person.respectAndStrength |= uint8(respect) << respectShift
 	}
 }
 
 func WithStrength(strength int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.strength = uint8(strength)
+		person.respectAndStrength |= uint8(strength) << strengthShift
 	}
 }
 
 func WithExperience(experience int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.experience = uint8(experience)
+		person.experienceAndLevel |= uint8(experience) << experienceShift
 	}
 }
 
 func WithLevel(level int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.level = uint8(level)
+		person.experienceAndLevel |= uint8(level) << levelShift
 	}
 }
 
 func WithHouse() func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.hasHouse = true
+		m := 1 << hasHouseShift
+		person.manaAndHelthAndFlags[2] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[1] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[0] |= byte(m)
 	}
 }
 
 func WithGun() func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.hasGun = true
+		m := 1 << hasGunShift
+		person.manaAndHelthAndFlags[2] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[1] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[0] |= byte(m)
 	}
 }
 
 func WithFamily() func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.hasFamilty = true
+		m := 1 << hasFamilyShift
+		person.manaAndHelthAndFlags[2] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[1] |= byte(m)
+		m = m >> byteSize
+		person.manaAndHelthAndFlags[0] |= byte(m)
 	}
 }
 
 func WithType(personType int) func(*GamePerson) {
 	return func(person *GamePerson) {
-		person.personType = uint8(personType)
+		person.personTypeAndNameLen |= uint8(personType) << personTypeShift
 	}
 }
 
@@ -97,16 +140,59 @@ const (
 	WarriorGamePersonType
 )
 
-// GamePerson выравнивание 8 байт, потому что у строка это заголовок вида (ptr, len), то есть 8 + 8 байт
+const (
+	byteSize = 8
+
+	personTypeSize  = 2
+	personTypeShift = 6
+
+	nameLenSize  = 6
+	nameLenShift = 0
+
+	respectSize  = 4
+	respectShift = 4
+
+	strengthSize  = 4
+	strengthShift = 0
+
+	experienceSize  = 4
+	experienceShift = 4
+
+	levelSize  = 4
+	levelShift = 0
+
+	manaSize  = 10
+	manaShift = 13
+
+	healthSize  = 10
+	healthShift = 3
+
+	hasHouseShift  = 2
+	hasGunShift    = 1
+	hasFamilyShift = 0
+)
+
+const maxNameLen = 42
+
 type GamePerson struct {
-	hasHouse, hasGun, hasFamilty                     bool  // выравнивание на 8
-	personType, respect, strength, experience, level uint8 // пойдет вместе булами выше в одно выравнивание, видимо потому что все однобайтовое
+	// раскладываем по половинке байта попарно
+	respectAndStrength byte
+	experienceAndLevel byte
 
-	mana, health  uint16 // новые выравнивание на 8, offset 8 и 10 соотвественно
-	x, y, z, gold int32  // займет 2 раза по 8 байт, offsets 12, 16, 20, 24 соответственно
-	name          string // займет 2 раза по 8 байт, offset 32
+	// пакуем mana (10 bits), health (10 bits), hasHouse + hasGun + hasFamily (3 bits total) в 3 байта (24 бита)
+	manaAndHelthAndFlags [3]byte
 
-	// итоговый размер будет 48
+	// пакуем тип персоны (2 бита) и длину имени (6 бит) в один байт
+	personTypeAndNameLen byte
+
+	// массив байт с максимальной емкостью, предусмотренной задачей (42 байта)
+	nameBytes [maxNameLen]byte
+
+	// так как выше битики ровно упакуются по 4 байта, то 4 байта выравнивания допустимо
+	// в связи с этим можно тут хранить все в int32 числа без битовой магии
+	x, y, z, gold int32
+
+	// Всего получится как раз 64 байта
 }
 
 func NewGamePerson(options ...Option) GamePerson {
@@ -120,7 +206,8 @@ func NewGamePerson(options ...Option) GamePerson {
 }
 
 func (p *GamePerson) Name() string {
-	return p.name
+	n := int(extractFromByte(p.personTypeAndNameLen, nameLenSize, nameLenShift))
+	return unsafe.String(&p.nameBytes[0], n)
 }
 
 func (p *GamePerson) X() int {
@@ -140,73 +227,57 @@ func (p *GamePerson) Gold() int {
 }
 
 func (p *GamePerson) Mana() int {
-	return int(p.mana)
+	m := uint32(0)
+	m |= uint32(p.manaAndHelthAndFlags[0]) << (2 * byteSize)
+	m |= uint32(p.manaAndHelthAndFlags[1]) << byteSize
+	m |= uint32(p.manaAndHelthAndFlags[2])
+
+	return int(extractFromUint32(m, manaSize, manaShift))
 }
 
 func (p *GamePerson) Health() int {
-	return int(p.health)
+	m := uint32(0)
+	m |= uint32(p.manaAndHelthAndFlags[0]) << (2 * byteSize)
+	m |= uint32(p.manaAndHelthAndFlags[1]) << byteSize
+	m |= uint32(p.manaAndHelthAndFlags[2])
+
+	return int(extractFromUint32(m, healthSize, healthShift))
 }
 
 func (p *GamePerson) Respect() int {
-	return int(p.respect)
+	return int(extractFromByte(p.respectAndStrength, respectSize, respectShift))
 }
 
 func (p *GamePerson) Strength() int {
-	return int(p.strength)
+	return int(extractFromByte(p.respectAndStrength, strengthSize, strengthShift))
 }
 
 func (p *GamePerson) Experience() int {
-	return int(p.experience)
+	return int(extractFromByte(p.experienceAndLevel, experienceSize, experienceShift))
 }
 
 func (p *GamePerson) Level() int {
-	return int(p.level)
+	return int(extractFromByte(p.experienceAndLevel, levelSize, levelShift))
 }
 
 func (p *GamePerson) HasHouse() bool {
-	return p.hasHouse
+	return extractFromByte(p.manaAndHelthAndFlags[2], 1, hasHouseShift) > 0
 }
 
 func (p *GamePerson) HasGun() bool {
-	return p.hasGun
+	return extractFromByte(p.manaAndHelthAndFlags[2], 1, hasGunShift) > 0
 }
 
 func (p *GamePerson) HasFamilty() bool {
-	return p.hasFamilty
+	return extractFromByte(p.manaAndHelthAndFlags[2], 1, hasFamilyShift) > 0
 }
 
 func (p *GamePerson) Type() int {
-	return int(p.personType)
+	return int(extractFromByte(p.personTypeAndNameLen, personTypeSize, personTypeShift))
 }
 
 func TestGamePerson(t *testing.T) {
-
 	assert.LessOrEqual(t, unsafe.Sizeof(GamePerson{}), uintptr(64))
-
-	fmt.Println("Sizeof:", unsafe.Sizeof(GamePerson{}))
-	fmt.Println("Alignof:", unsafe.Alignof(GamePerson{}))
-	fmt.Println()
-
-	gp := GamePerson{}
-	fmt.Println("Offsetof(hasHouse):", unsafe.Offsetof(gp.hasHouse))
-	fmt.Println("Offsetof(hasGun):", unsafe.Offsetof(gp.hasGun))
-	fmt.Println("Offsetof(hasFamilty):", unsafe.Offsetof(gp.hasFamilty))
-	fmt.Println()
-	fmt.Println("Offsetof(personType):", unsafe.Offsetof(gp.personType))
-	fmt.Println("Offsetof(respect):", unsafe.Offsetof(gp.respect))
-	fmt.Println("Offsetof(strength):", unsafe.Offsetof(gp.strength))
-	fmt.Println("Offsetof(experience):", unsafe.Offsetof(gp.experience))
-	fmt.Println("Offsetof(level):", unsafe.Offsetof(gp.level))
-	fmt.Println()
-	fmt.Println("Offsetof(mana):", unsafe.Offsetof(gp.mana))
-	fmt.Println("Offsetof(health):", unsafe.Offsetof(gp.health))
-	fmt.Println()
-	fmt.Println("Offsetof(x):", unsafe.Offsetof(gp.x))
-	fmt.Println("Offsetof(y):", unsafe.Offsetof(gp.y))
-	fmt.Println("Offsetof(z):", unsafe.Offsetof(gp.z))
-	fmt.Println("Offsetof(gold):", unsafe.Offsetof(gp.gold))
-	fmt.Println()
-	fmt.Println("Offsetof(name):", unsafe.Offsetof(gp.name))
 
 	const x, y, z = math.MinInt32, math.MaxInt32, 0
 	const name = "aaaaaaaaaaaaa_bbbbbbbbbbbbb_cccccccccccccc"
