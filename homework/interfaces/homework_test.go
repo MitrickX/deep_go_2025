@@ -18,28 +18,64 @@ type MessageService struct {
 	NotEmptyStruct bool
 }
 
+type Storage struct {
+	Count int
+}
+
+var NewStorage func() *Storage
+
+func init() {
+	var count = 0
+	NewStorage = func() *Storage {
+		count++
+		return &Storage{Count: count}
+	}
+}
+
+type cons struct {
+	fn     func() any
+	isOnce bool // need to call fn only once
+	cache  any
+}
+
 type Container struct {
-	constructors map[string]func() any
+	constructors map[string]cons
 }
 
 func NewContainer() *Container {
-	// need to implement
 	return &Container{
-		constructors: make(map[string]func() any),
+		constructors: make(map[string]cons),
 	}
 }
 
 func (c *Container) RegisterType(name string, constructor func() any) {
-	c.constructors[name] = constructor
+	c.constructors[name] = cons{fn: constructor}
+}
+
+func (c *Container) RegisterSingletonType(name string, constructor func() any) {
+	c.constructors[name] = cons{
+		fn:     constructor,
+		isOnce: true,
+	}
 }
 
 func (c *Container) Resolve(name string) (any, error) {
-	constructor, ok := c.constructors[name]
+	cons, ok := c.constructors[name]
 	if !ok {
 		return nil, errors.New("constructor `%s` hasn't been registered")
 	}
 
-	return constructor(), nil
+	if cons.isOnce && cons.cache != nil {
+		return cons.cache, nil
+	}
+
+	result := cons.fn()
+	if cons.isOnce {
+		cons.cache = result
+		c.constructors[name] = cons
+	}
+
+	return result, nil
 }
 
 func TestDIContainer(t *testing.T) {
@@ -49,6 +85,10 @@ func TestDIContainer(t *testing.T) {
 	})
 	container.RegisterType("MessageService", func() any {
 		return &MessageService{}
+	})
+
+	container.RegisterSingletonType("Storage", func() any {
+		return NewStorage()
 	})
 
 	userService1, err := container.Resolve("UserService")
@@ -67,4 +107,19 @@ func TestDIContainer(t *testing.T) {
 	paymentService, err := container.Resolve("PaymentService")
 	assert.Error(t, err)
 	assert.Nil(t, paymentService)
+
+	maybeStorage, err := container.Resolve("Storage")
+	assert.NoError(t, err)
+	assert.NotNil(t, maybeStorage)
+	storage, ok := maybeStorage.(*Storage)
+	assert.True(t, ok)
+	assert.Equal(t, 1, storage.Count)
+
+	// call second time - got the same instance
+	maybeStorage, err = container.Resolve("Storage")
+	assert.NoError(t, err)
+	assert.NotNil(t, maybeStorage)
+	storage, ok = maybeStorage.(*Storage)
+	assert.True(t, ok)
+	assert.Equal(t, 1, storage.Count)
 }
