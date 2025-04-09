@@ -34,6 +34,7 @@ func parseTag(tag reflect.StructTag) (fieldName string, omitempty bool, ok bool)
 	fieldName = strings.TrimSpace(parts[0])
 	if len(fieldName) == 0 {
 		ok = false
+		return
 	}
 
 	if len(parts) == 1 {
