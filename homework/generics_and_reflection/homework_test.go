@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,9 +18,62 @@ type Person struct {
 	Married bool   `properties:"married"`
 }
 
+const (
+	LexemProperties = "properties"
+	LexemOmitEmpty  = "omitempty"
+)
+
+func parseTag(tag reflect.StructTag) (fieldName string, omitempty bool, ok bool) {
+	meta, ok := tag.Lookup(LexemProperties)
+	if !ok {
+		return
+	}
+
+	parts := strings.Split(meta, ",")
+
+	fieldName = strings.TrimSpace(parts[0])
+	if len(fieldName) == 0 {
+		ok = false
+		return
+	}
+
+	if len(parts) == 1 {
+		return
+	}
+
+	omitempty = strings.TrimSpace(parts[1]) == LexemOmitEmpty
+	return
+}
+
 func Serialize(person Person) string {
-	// need to implement
-	return ""
+	personType := reflect.TypeOf(person)
+	personValue := reflect.ValueOf(person)
+
+	bs := strings.Builder{}
+
+	n := personType.NumField()
+	for i := 0; i < n; i++ {
+		personField := personType.Field(i)
+		fieldName, omitempty, ok := parseTag(personField.Tag)
+		if !ok {
+			continue
+		}
+
+		fieldValue := personValue.Field(i)
+		if omitempty && fieldValue.IsZero() {
+			continue
+		}
+
+		if bs.Len() > 0 {
+			bs.WriteByte('\n')
+		}
+
+		bs.WriteString(fieldName)
+		bs.WriteByte('=')
+		bs.WriteString(fmt.Sprintf("%v", fieldValue))
+	}
+
+	return bs.String()
 }
 
 func TestSerialization(t *testing.T) {
