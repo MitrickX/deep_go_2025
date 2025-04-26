@@ -6,33 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type Task struct {
-	Identifier int
-	Priority   int
-}
-
-type Scheduler struct {
-	// need to implement
-}
-
-func NewScheduler() Scheduler {
-	// need to implement
-	return Scheduler{}
-}
-
-func (s *Scheduler) AddTask(task Task) {
-	// need to implement
-}
-
-func (s *Scheduler) ChangeTaskPriority(taskID int, newPriority int) {
-	// need to implement
-}
-
-func (s *Scheduler) GetTask() Task {
-	// need to implement
-	return Task{}
-}
-
+// go test -v .
 func TestTrace(t *testing.T) {
 	task1 := Task{Identifier: 1, Priority: 10}
 	task2 := Task{Identifier: 2, Priority: 20}
@@ -56,7 +30,8 @@ func TestTrace(t *testing.T) {
 	scheduler.ChangeTaskPriority(1, 100)
 
 	task = scheduler.GetTask()
-	assert.Equal(t, task1, task)
+	// Приоритет поменялся, соот-но просто сравнивать с task1 нельзя
+	assert.Equal(t, Task{Identifier: 1, Priority: 100}, task)
 
 	task = scheduler.GetTask()
 	assert.Equal(t, task3, task)
