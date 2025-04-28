@@ -1,7 +1,6 @@
 package main
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,71 +12,36 @@ import (
 // go test -race -v -count=1 .
 
 type RWMutex struct {
-	mx       sync.Mutex
-	isWriter atomic.Bool
-	readers  atomic.Int32
+	mx      sync.Mutex
+	readers sync.WaitGroup
 }
 
 func (m *RWMutex) Lock() {
 	// если какой-то писатель захватил замок, то дождемся отпускания замка
 	m.mx.Lock()
 
-	// теперь мы единственный писатель, замок наш
-	m.isWriter.Store(true)
-
 	// но нам надо точно удостовериться, что все читатели отпустили свои read замки
 	// потому что согласно семантике rwlock надо дождаться пока читатели доделают свою работу
 	// вот собственно и ждем
-	m.waitForReaders()
+	m.readers.Wait()
 
 	// вот тут у нас гарантирован инвариант, что все читатели дали зеленый свет (отпустили свои замки)
 	// и писатель только один - текущий и он закрыл замок
 }
 
 func (m *RWMutex) Unlock() {
-	m.isWriter.Store(false)
 	m.mx.Unlock()
 }
 
 func (m *RWMutex) RLock() {
 	// если есть писатель, то надо его дождаться
-	m.waitForWriter()
-
+	m.mx.Lock()
+	defer m.mx.Unlock()
 	m.readers.Add(1)
 }
 
 func (m *RWMutex) RUnlock() {
-	m.readers.Add(-1)
-}
-
-const spinLockCounter = 100
-
-func (m *RWMutex) waitForReaders() {
-	// подождем активно немного времени, вдруг успеем дождаться
-	for i := 0; i < spinLockCounter; i++ {
-		if m.readers.Load() == 0 {
-			break
-		}
-	}
-
-	// иначе будем отдавать управление планировщику пока не дождемся инварианта
-	for m.readers.Load() != 0 {
-		runtime.Gosched()
-	}
-}
-
-func (m *RWMutex) waitForWriter() {
-	// подождем активно немного времени, вдруг успеем дождаться
-	for i := 0; i < spinLockCounter; i++ {
-		if !m.isWriter.Load() {
-			break
-		}
-	}
-
-	// иначе будем отдавать управление планировщику пока не дождемся инварианта
-	for m.isWriter.Load() {
-		runtime.Gosched()
-	}
+	m.readers.Done()
 }
 
 func TestRWMutexWithWriter(t *testing.T) {
