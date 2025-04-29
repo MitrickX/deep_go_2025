@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -8,25 +9,39 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// go test -race -v -count=1 .
+
 type RWMutex struct {
-	// need to implement
+	mx      sync.Mutex
+	readers sync.WaitGroup
 }
 
 func (m *RWMutex) Lock() {
-	// need to implement
+	// если какой-то писатель захватил замок, то дождемся отпускания замка
+	m.mx.Lock()
+
+	// но нам надо точно удостовериться, что все читатели отпустили свои read замки
+	// потому что согласно семантике rwlock надо дождаться пока читатели доделают свою работу
+	// вот собственно и ждем
+	m.readers.Wait()
+
+	// вот тут у нас гарантирован инвариант, что все читатели дали зеленый свет (отпустили свои замки)
+	// и писатель только один - текущий и он закрыл замок
 }
 
 func (m *RWMutex) Unlock() {
-	// need to implement
+	m.mx.Unlock()
 }
 
 func (m *RWMutex) RLock() {
-	// need to implement
-
+	// если есть писатель, то надо его дождаться
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	m.readers.Add(1)
 }
 
 func (m *RWMutex) RUnlock() {
-	// need to implement
+	m.readers.Done()
 }
 
 func TestRWMutexWithWriter(t *testing.T) {
