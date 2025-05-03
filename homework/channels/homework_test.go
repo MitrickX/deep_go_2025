@@ -54,10 +54,7 @@ func (wp *WorkerPool) AddTask(task func()) (err error) {
 // Shutdown all workers and wait for all
 // tasks in the pool to complete
 func (wp *WorkerPool) Shutdown() {
-	wp.tasks <- func() {
-		close(wp.tasks)
-	}
-
+	close(wp.tasks)
 	wp.wg.Wait()
 }
 
